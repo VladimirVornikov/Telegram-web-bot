@@ -1,5 +1,5 @@
 const telegramApi = require('node-telegram-bot-api');
-const express =require("express")
+const express = require("express")
 const cors = require('cors')
 
 
@@ -18,27 +18,32 @@ bot.on("message", async (msg) => {
     const nickname = msg.from.first_name;
 
     if (text === "/start") {
-        await bot.sendMessage(chatId, `Hi ${nickname}, welcome to telegram bot. My name is TroodBot. Please, fill the form below`, {
-            reply_markup: {
-                keyboard: [
-                    [{text: "Fill form", web_app: {url: webAppUrl}}]
-                ]
-            }
-        })
+        await bot.sendMessage(chatId, `Hi ${nickname}, welcome to telegram bot. My name is TroodBot.`);
+        
+        setTimeout(() => {
+            bot.sendMessage(chatId, "I'm a bot that helps people track time, and also take into account the user's health status based on their images.");
+        }, 1000);
+        
+        setTimeout(() => {
+            bot.sendMessage(chatId, "Please, fill the form below, and make a", {
+                reply_markup: {
+                    keyboard: [
+                        [{text: "Fill form", web_app: {url: webAppUrl}}]
+                    ]
+                }
+            });
+        }, 3000);
+        
     }
-    bot.sendMessage(chatId, "Ok, now we need your foto. Please make a foto", {
-        reply_markup: {
-            inline_keyboard: [
-                [{text: "Make a foto", web_app: {url: webAppUrl}}]
-            ]
-        }
-    })
+    
 })
 
-app.post("/web-data", async (req, res) => {
+app.post("/web-data", (req, res) => {
+    console.log("Received data:", req.body);
+
     const {queryId, totalTime} = req.body;
     try {
-        await bot.answerWebAppQuery(queryId, {
+        bot.answerWebAppQuery(queryId, {
             type: "article",
             id: queryId,
             title: "All right",
@@ -46,15 +51,15 @@ app.post("/web-data", async (req, res) => {
         })
         return res.status(200).json({})
     } catch(e) {
-        await bot.answerWebAppQuery(queryId, {
+        bot.answerWebAppQuery(queryId, {
             type: "article",
             id: queryId,
-            title: "Not good",
+            title: "Fail :(",
             input_message_content: {message_text: e }
         })
         return res.status(500).json({})
     }
-})
+});
 
 const PORT = 8000;
 
