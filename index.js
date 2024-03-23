@@ -1,7 +1,9 @@
 const telegramApi = require('node-telegram-bot-api');
 const qr = require("qr-image")
-const { Telegraf  } = require('telegraf')
 require('dotenv').config()
+const {seqno, balance} = require("./wallet.js") 
+
+console.log(seqno, balance);
 
 const cors = require('cors')
 const express = require('express');
@@ -33,7 +35,7 @@ const getInvoice = (id) => {
         prices: [
             {
                 "label": "My product",
-                "amount": 100 * 100
+                "amount": 1000 * 1000
             }
         ] 
     };
