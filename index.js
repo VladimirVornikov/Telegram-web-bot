@@ -2,21 +2,63 @@ const telegramApi = require('node-telegram-bot-api');
 const qr = require("qr-image")
 require('dotenv').config()
 const {seqno, balance} = require("./wallet.js") 
+const {getWallets} = require("./ton-connect/wallet.js")
+const {TonConnectStorage} = require('./ton-connect/storage.js')
+const {TonConnect} = require('@tonconnect/sdk')
+const QRCode = require("qrcode")
+const {getConnector} = require('./ton-connect/connector.js')
+
+const token = process.env.TELEGRAM_BOT_TOKEN;
+const webAppUrl = process.env.WEB_URL;
+const bot = new telegramApi(token, {polling: true});
 
 console.log(seqno, balance);
 
+bot.onText(/\/connect/, async msg => {
+    const chatId = msg.chat.id;
+    const wallets = await getWallets();
+
+    const connector = getConnector(chatId);
+
+    connector.onStatusChange(async wallet => {
+        if (wallet) {
+            const walletName =
+                (await getWalletInfo(wallet.device.appName))?.name || wallet.device.appName;
+            bot.sendMessage(chatId, `${walletName} wallet connected!`);
+        }
+    });
+
+    const link = connector.connect(wallets);
+    const image = await QRCode.toBuffer(link);
+
+    await bot.sendPhoto(chatId, image, {
+        reply_markup: {
+            inline_keyboard: [
+                [
+                    {
+                        text: 'Choose a Wallet',
+                        callback_data: JSON.stringify({ method: 'chose_wallet' })
+                    },
+                    {
+                        text: 'Open Link',
+                        url: `https://ton-connect.github.io/open-tc?connect=${encodeURIComponent(
+                            link
+                        )}`
+                    }
+                ]
+            ]
+        }
+    });
+});
 const cors = require('cors')
 const express = require('express');
 const bodyParser = require('body-parser');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+
 app.use(bodyParser.json());
 app.use(cors());
-
-const token = process.env.TELEGRAM_BOT_TOKEN;
-const webAppUrl = process.env.WEB_URL;
-const bot = new telegramApi(token, {polling: true});
 
 const walletNames = {};
 
