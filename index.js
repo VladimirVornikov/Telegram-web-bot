@@ -2,11 +2,10 @@ const telegramApi = require('node-telegram-bot-api');
 const qr = require("qr-image")
 require('dotenv').config()
 const {seqno, balance} = require("./wallet.js") 
-const {getWallets} = require("./ton-connect/wallet.js")
-const {TonConnectStorage} = require('./ton-connect/storage.js')
-const {TonConnect} = require('@tonconnect/sdk')
+const {getWallets, getWalletInfo} = require("./ton-connect/wallet.js")
 const QRCode = require("qrcode")
 const {getConnector} = require('./ton-connect/connector.js')
+const fs = require('fs')
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const webAppUrl = process.env.WEB_URL;
@@ -41,9 +40,7 @@ bot.onText(/\/connect/, async msg => {
                     },
                     {
                         text: 'Open Link',
-                        url: `https://ton-connect.github.io/open-tc?connect=${encodeURIComponent(
-                            link
-                        )}`
+                        url: `https://ton-connect.github.io/open-tc/`
                     }
                 ]
             ]
@@ -229,3 +226,159 @@ app.post('/upload', async (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+const walletMenuCallbacks = {
+    chose_wallet: onChooseWalletClick,
+    select_wallet: onWalletClick,
+    universal_qr: onOpenUniversalQRClick
+};
+bot.on('callback_query', query => { 
+    if (!query.data) {
+        return;
+    }
+
+    let request;
+
+    try {
+        request = JSON.parse(query.data);
+    } catch {
+        return;
+    }
+
+    if (!walletMenuCallbacks[request.method]) {
+        return;
+    }
+
+    walletMenuCallbacks[request.method](query, request.data);
+});
+
+
+async function onChooseWalletClick(query, _) {
+    const wallets = await getWallets();
+
+    await bot.editMessageReplyMarkup(
+        {
+            inline_keyboard: [
+                wallets.map(wallet => ({
+                    text: wallet.name,
+                    callback_data: JSON.stringify({ method: 'select_wallet', data: wallet.appName })
+                })),
+                [
+                    {
+                        text: '« Back',
+                        callback_data: JSON.stringify({
+                            method: 'universal_qr'
+                        })
+                    }
+                ]
+            ]
+        },
+        {
+            message_id: query.message.message_id,
+            chat_id: query.message.chat.id
+        }
+    );
+}
+
+async function editQR(message, link) {
+    const fileName = 'QR-code-' + Math.round(Math.random() * 10000000000);
+
+    await QRCode.toFile(`./${fileName}`, link);
+
+    await bot.editMessageMedia(
+        {
+            type: 'photo',
+            media: `attach://${fileName}`
+        },
+        {
+            message_id: message?.message_id,
+            chat_id: message?.chat.id
+        }
+    );
+
+    await new Promise(r => fs.rm(`./${fileName}`, r));
+}
+
+async function onOpenUniversalQRClick(query, _) {
+    const chatId = query.message.chat.id;
+    const wallets = await getWallets();
+
+    const connector = getConnector(chatId);
+
+    connector.onStatusChange(wallet => {
+        if (wallet) {
+            bot.sendMessage(chatId, `${wallet.device.appName} wallet connected!`);
+        }
+    });
+
+    const link = connector.connect(wallets);
+
+    await editQR(query.message, link);
+
+    await bot.editMessageReplyMarkup(
+        {
+            inline_keyboard: [
+                [
+                    {
+                        text: 'Choose a Wallet',
+                        callback_data: JSON.stringify({ method: 'chose_wallet' })
+                    },
+                    {
+                        text: 'Open Link',
+                        url: `https://ton-connect.github.io/open-tc?connect=${encodeURIComponent(
+                            link
+                        )}`
+                    }
+                ]
+            ]
+        },
+        {
+            message_id: query.message?.message_id,
+            chat_id: query.message?.chat.id
+        }
+    );
+}
+
+async function onWalletClick(query, data) {
+    const chatId = query.message.chat.id;
+    const connector = getConnector(chatId);
+
+    connector.onStatusChange(wallet => {
+        if (wallet) {
+            bot.sendMessage(chatId, `${wallet.device.appName} wallet connected!`);
+        }
+    });
+
+    const selectedWallet = await getWalletInfo(data);
+    if (!selectedWallet) {
+        return;
+    }
+
+    const link = connector.connect({
+        bridgeUrl: selectedWallet.bridgeUrl,
+        universalLink: selectedWallet.universalLink
+    });
+
+    await editQR(query.message, link);
+
+    await bot.editMessageReplyMarkup(
+        {
+            inline_keyboard: [
+                [
+                    {
+                        text: '« Back',
+                        callback_data: JSON.stringify({ method: 'chose_wallet' })
+                    },
+                    {
+                        text: `Open ${selectedWallet.name}`,
+                        url: link
+                    }
+                ]
+            ]
+        },
+        {
+            message_id: query.message?.message_id,
+            chat_id: chatId
+        }
+    );
+}
