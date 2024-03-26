@@ -1,5 +1,16 @@
+const { createClient } =  require('redis');
+require("dotenv").config();
+
 
 const storage = new Map();
+
+const client = createClient({ url: process.env.REDIS_URL });
+
+// client.on('error', err => console.log('Redis Client Error', err));
+
+async function initRedisClient() {
+    await client.connect();
+}
 
 class TonConnectStorage {
     constructor(chatId) {
@@ -22,4 +33,4 @@ class TonConnectStorage {
     }
 }
 
-module.exports = { TonConnectStorage };
+module.exports = { TonConnectStorage, initRedisClient };
